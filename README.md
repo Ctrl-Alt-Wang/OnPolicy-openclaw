@@ -1,8 +1,14 @@
-# 医学 Agent 在线策略蒸馏（OPCD）实验记录
+# 医学 Agent 在线策略蒸馏（OPSD / OPCD）实验记录
 
-> **项目目标**：将线上医学 Agent（nanobot）接入 OpenClaw-RL 框架，通过在线策略蒸馏（OPCD/OPD）实时训练本地医学语言模型，提升问答质量。
+> **项目目标**：将线上医学 Agent（nanobot）接入 OpenClaw-RL 框架，通过在线策略自蒸馏（OPSD）实时训练本地医学语言模型，提升问答质量。
 >
-> **当前进展**：完成了 Self-OPCD 端到端验证（Qwen3.5-9B，2000条华佗数据，110个梯度步，A800 80GB），并进一步接入 GPT-5.4 外部 judge，进行第二轮训练。
+> **当前进展**：完成了 OPSD 端到端验证（Qwen3.5-9B，2000条华佗数据，110个梯度步，A800 80GB），并进一步接入 GPT-5.4 外部 judge（变为真正的 OPD），进行第二轮训练。
+>
+> **术语说明**：
+> - **OPD**（Online Policy Distillation，在线策略蒸馏）：框架名称，通用概念
+> - **OPSD**（Online Policy **Self**-Distillation，在线策略**自**蒸馏）：第一轮实验的具体实现——teacher 和 student 是同一个模型，通过 hint augmentation 实现自我改进
+> - **OPCD**（On-Policy Continual Distillation）：论文（arXiv 2602.12275）中对 OPSD 这类方法的学术称呼
+> - **GPT judge OPD**：第二轮实验——judge 换成外部 GPT-5.4，teacher logprobs 仍由本地模型提供
 
 ---
 
@@ -24,9 +30,9 @@
 
 ## 整体架构与原理
 
-### OPCD 是什么？
+### OPSD 是什么？
 
-OPCD（On-Policy Continual Distillation）是 OPD（Online Policy Distillation）的一种实现形式。核心思想：
+**OPSD（Online Policy Self-Distillation，在线策略自蒸馏）** 是本项目第一轮训练采用的方法，属于 OPD（Online Policy Distillation）框架的一种变体，对应学术论文中的 OPCD（On-Policy Continual Distillation，arXiv 2602.12275）。核心思想：
 
 ```
 传统离线蒸馏（SFT）:
