@@ -335,3 +335,8 @@ Run 2（GPT-5.4 judge，lr=5e-7）：
 4. **tokenizer 一致性是 OPSD/OPD 的硬约束**：teacher 接收的是 student 生成的 token ID，不同 tokenizer 会导致 ID 映射到错误的词，logprob 完全无效。真正的 OPD（teacher ≠ student）需要同系列开源模型，不能用闭源模型做 teacher
 
 5. **GPT judge 代理方案有效**：利用 OpenClaw-OPD 中 `return_logprob` 字段区分 judge/teacher 调用，通过代理服务器实现路由，无需修改框架源码
+
+
+
+<img width="2445" height="807" alt="image" src="https://github.com/user-attachments/assets/76dce535-11a5-4306-ac4e-7091abacf8ba" />
+
