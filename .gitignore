@@ -1,11 +1,27 @@
-﻿__pycache__/
-*.pyc
-*.pth
-*.bin
+﻿# Dependencies
+**/node_modules/
+**/.next/
+**/dist/
+**/build/
+**/__pycache__/
+**/*.pyc
+**/*.egg-info/
+
+# Model weights & data
 *.safetensors
-wandb/
-.env
+*.bin
+*.pth
+*.gguf
 lora_checkpoints/
 eval_results/
 logs/
 *.log
+
+# Secrets & env
+.env
+**/ssh_key/
+**/.localdata/
+
+# Nested git repos (add as code, not submodules)
+nanobot/.git/
+OpenClaw-RL/.git/

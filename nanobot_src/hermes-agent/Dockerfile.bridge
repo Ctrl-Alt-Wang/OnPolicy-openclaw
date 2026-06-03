@@ -1,0 +1,70 @@
+ARG BASE_TAG=latest
+FROM hermes-base:${BASE_TAG}
+
+ENV PYTHONUNBUFFERED=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright
+
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG PLAYWRIGHT_DOWNLOAD_HOST=https://npmmirror.com/mirrors/playwright
+ARG HERMES_INSTALL_BROWSER=false
+ARG HERMES_INSTALL_WHATSAPP_BRIDGE=false
+ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST}
+
+# Use domestic mirror for apt (for any additional system packages)
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
+    sed -i 's|http://security.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+        libffi-dev shared-mime-info chromium python3-pip \
+        poppler-utils tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng \
+        libreoffice-core libreoffice-writer libreoffice-calc \
+        libmagic1 file antiword catdoc && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install --break-system-packages -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple \
+        requests pymupdf pdfplumber python-docx openpyxl python-pptx pandas xlrd odfpy python-magic chardet
+
+WORKDIR /opt/hermes
+RUN npm config set fetch-retries 5 && \
+    npm config set fetch-retry-mintimeout 20000 && \
+    npm config set fetch-retry-maxtimeout 120000 && \
+    npm config set registry ${NPM_REGISTRY}
+
+# WhatsApp bridge (optional)
+COPY --chown=hermes:hermes scripts/whatsapp-bridge/package.json scripts/whatsapp-bridge/package-lock.json ./scripts/whatsapp-bridge/
+RUN if [ "$HERMES_INSTALL_WHATSAPP_BRIDGE" = "true" ]; then \
+        cd /opt/hermes/scripts/whatsapp-bridge && npm install --prefer-offline --no-audit --no-fund; \
+    else \
+        echo "Skipping WhatsApp bridge npm install; rebuild with HERMES_INSTALL_WHATSAPP_BRIDGE=true to include WhatsApp bridge dependencies."; \
+    fi
+
+# Copy source code (updates on top of base image)
+COPY --chown=hermes:hermes pyproject.toml requirements.txt ./
+COPY --chown=hermes:hermes acp_adapter agent cron gateway hermes_cli plugins tools ./
+COPY --chown=hermes:hermes batch_runner.py cli.py hermes_constants.py hermes_logging.py hermes_state.py hermes_time.py model_tools.py rl_cli.py run_agent.py setup.py toolset_distributions.py toolsets.py trajectory_compressor.py utils.py ./
+
+RUN chown -R hermes:hermes /opt/hermes
+USER hermes
+RUN if [ ! -d /opt/hermes/.venv ]; then uv venv --seed /opt/hermes/.venv; fi && \
+    uv pip install --no-cache-dir -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple setuptools wheel weasyprint \
+        pymupdf pdfplumber python-docx openpyxl python-pptx pandas xlrd odfpy python-magic chardet && \
+    uv pip install --no-build-isolation --no-cache-dir -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple --extra-index-url https://pypi.org/simple/ -e ".[all]"
+
+COPY --chown=hermes:hermes . /opt/hermes
+USER root
+RUN find /opt/hermes -name '*.sh' -exec sed -i 's/\r$//' {} + && \
+    chmod +x /opt/hermes/docker/entrypoint.sh
+
+ENV HERMES_HOME=/opt/data
+VOLUME [ "/opt/data" ]
+ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
+
+ENV API_SERVER_ENABLED=true
+ENV API_SERVER_HOST=0.0.0.0
+ENV API_SERVER_PORT=18080
+ENV API_SERVER_KEY=dev-hermes-bridge-key
+ENV GATEWAY_ALLOW_ALL_USERS=true
+
+EXPOSE 18080
+
+CMD ["gateway", "run", "-v"]

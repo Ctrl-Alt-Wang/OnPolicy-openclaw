@@ -1,0 +1,81 @@
+# Compiled class file
+*.class
+
+*.pkl
+.DS_Store
+# Log file
+*.log
+*.pyc
+.idea
+__pycache__
+venv
+*.swp
+
+node_modules
+
+#model
+formbot/models/
+
+# BlueJ files
+*.ctxt
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+*.lock
+.git
+
+# 模型
+*.pth
+*.pt
+
+.env
+.DS_Store
+build/
+**/build/
+DerivedData
+*.ipa
+.idea
+node_modules/
+npm-debug.log
+yarn-error.log
+**/Pods/
+.env*
+cache
+.env_dev
+.env_prod
+.parquet
+.claude
+.claude/settings.local.json
+.hermes
+.qoder
+
+# Local planning and agent scratch docs. Use `git add -f docs/<path>` for shared docs.
+docs/
+openclaw/bridge-deploy-copy
+hermes-agent/deploy-copy
+platform/deploy_copy/*
+!platform/deploy_copy/.gitkeep
+openclaw/dist-runtime
+simple_front/dist
+openclaw/packages/libsignal-node/
+phone_front/dist
+hermes-agent/deploy_copy
+yizhihui_frontend/.next
+yizhihui_frontend/next-env.d.ts
+openclaw
+platform/deploy_copy
+phone_front
+hermes-agent/deploy_copy
+platform/app/routes/downloaded_images

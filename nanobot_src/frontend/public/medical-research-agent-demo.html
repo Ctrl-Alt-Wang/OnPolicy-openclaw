@@ -1,0 +1,1213 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>医学科研智能体</title>
+    <style>
+      :root {
+        --bg: #f4f7fa;
+        --panel: #ffffff;
+        --soft: #eef3f8;
+        --line: #d8e1eb;
+        --text: #162033;
+        --muted: #637187;
+        --blue: #2364aa;
+        --green: #1f8a5b;
+        --amber: #b56b0f;
+        --red: #b42318;
+        --shadow: 0 14px 36px rgba(18, 31, 48, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      textarea {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .topbar {
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+
+      .topbar-inner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        width: min(1500px, calc(100% - 28px));
+        min-height: 74px;
+        margin: 0 auto;
+      }
+
+      .brand {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 13px;
+      }
+
+      .brand img {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        object-fit: cover;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+
+      h1 {
+        color: #101928;
+        font-size: 23px;
+        font-weight: 780;
+        line-height: 1.2;
+      }
+
+      .subtitle {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .auth {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .auth input {
+        width: 150px;
+        height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfe;
+        padding: 0 10px;
+        color: var(--text);
+        font-size: 13px;
+        outline: none;
+      }
+
+      .auth input:focus,
+      textarea:focus {
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(35, 100, 170, 0.12);
+      }
+
+      .button {
+        min-height: 36px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 0 12px;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .button.primary {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+
+      .button.danger {
+        border-color: rgba(180, 35, 24, 0.25);
+        color: var(--red);
+      }
+
+      .button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 380px;
+        gap: 16px;
+        width: min(1500px, calc(100% - 28px));
+        min-height: 0;
+        margin: 0 auto;
+        padding: 16px 0 24px;
+      }
+
+      .chat-panel,
+      .side-panel {
+        min-height: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .chat-panel {
+        display: grid;
+        grid-template-rows: auto auto minmax(0, 1fr) auto;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .chat-header,
+      .side-section-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--line);
+        padding: 15px 17px;
+      }
+
+      .title {
+        color: #101928;
+        font-size: 16px;
+        font-weight: 760;
+        line-height: 1.3;
+      }
+
+      .hint {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .badge {
+        border-radius: 999px;
+        background: var(--soft);
+        color: var(--muted);
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 0 10px;
+        white-space: nowrap;
+        font-size: 12px;
+        font-weight: 760;
+      }
+
+      .badge.ok {
+        background: rgba(31, 138, 91, 0.1);
+        color: var(--green);
+      }
+
+      .badge.warn {
+        background: rgba(181, 107, 15, 0.12);
+        color: var(--amber);
+      }
+
+      .badge.error {
+        background: rgba(180, 35, 24, 0.1);
+        color: var(--red);
+      }
+
+      .messages {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        min-height: 360px;
+        overflow: auto;
+        padding: 18px;
+      }
+
+      .empty {
+        display: grid;
+        place-items: center;
+        min-height: 280px;
+        color: var(--muted);
+        text-align: center;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+
+      .message {
+        display: grid;
+        gap: 6px;
+        max-width: 86%;
+      }
+
+      .message.user {
+        justify-self: end;
+        align-self: flex-end;
+      }
+
+      .message.assistant,
+      .message.system {
+        justify-self: start;
+        align-self: flex-start;
+      }
+
+      .message-meta {
+        color: var(--muted);
+        font-size: 11px;
+      }
+
+      .bubble {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfe;
+        padding: 12px 13px;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.65;
+        white-space: pre-wrap;
+      }
+
+      .message.user .bubble {
+        border-color: var(--blue);
+        background: var(--blue);
+        color: #fff;
+      }
+
+      .message.system .bubble {
+        background: #fff8e9;
+        color: #6b4607;
+      }
+
+      .composer {
+        border-top: 1px solid var(--line);
+        padding: 14px;
+      }
+
+      .prompt-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 116px;
+        resize: vertical;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        color: var(--text);
+        background: #fbfcfe;
+        outline: none;
+        line-height: 1.55;
+      }
+
+      .composer-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .status-line {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .side-panel {
+        display: grid;
+        grid-auto-rows: max-content;
+        gap: 0;
+        overflow: hidden;
+      }
+
+      .side-section + .side-section {
+        border-top: 1px solid var(--line);
+      }
+
+      .side-body {
+        display: grid;
+        gap: 10px;
+        padding: 14px 15px 16px;
+      }
+
+      .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .metric,
+      .info-card,
+      .session-item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcfe;
+        padding: 11px;
+      }
+
+      .metric-label,
+      .small-label {
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 760;
+      }
+
+      .metric-value {
+        margin-top: 7px;
+        color: #101928;
+        font-size: 20px;
+        font-weight: 820;
+      }
+
+      .metric-foot,
+      .info-card p,
+      .session-item p {
+        margin-top: 6px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .session-list {
+        display: grid;
+        gap: 8px;
+        max-height: 220px;
+        overflow: auto;
+      }
+
+      .session-item {
+        width: 100%;
+        text-align: left;
+      }
+
+      .session-item.active {
+        border-color: var(--blue);
+        background: rgba(35, 100, 170, 0.06);
+      }
+
+      code {
+        border-radius: 5px;
+        background: #edf3f8;
+        padding: 1px 5px;
+        color: #254c7a;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+        font-size: 0.92em;
+      }
+
+      .mono {
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      @media (max-width: 1120px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .topbar-inner,
+        .layout {
+          width: min(100% - 20px, 1500px);
+        }
+
+        .topbar-inner {
+          align-items: flex-start;
+          flex-direction: column;
+          padding: 14px 0;
+        }
+
+        .auth {
+          justify-content: flex-start;
+        }
+
+        .auth input {
+          width: min(100%, 180px);
+        }
+
+        .message {
+          max-width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar-inner">
+          <div class="brand">
+            <img src="medclaw-logo.png" alt="" />
+            <div>
+              <h1>医学科研智能体</h1>
+              <p class="subtitle">可运行 chat：shared Hermes 空白点挖掘 + OpenClaw-compatible API</p>
+            </div>
+          </div>
+          <div class="auth">
+            <button id="demo-access-button" class="button primary" type="button">一键创建临时演示身份</button>
+            <button id="reset-demo-button" class="button" type="button">重置演示状态</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="chat-panel">
+          <div class="chat-header">
+            <div>
+              <h2 class="title">空白点挖掘 Chat</h2>
+              <p id="runtime-hint" class="hint">本地页面自动创建临时 shared 身份，直接发送默认任务。</p>
+            </div>
+            <span id="auth-badge" class="badge warn">等待凭证</span>
+          </div>
+
+          <div id="messages" class="messages">
+            <div class="empty">
+              <div>
+                <strong>这不是静态看板。</strong><br />
+                发送时会调用 <code>/api/shared-openclaw/chat</code>，再轮询
+                <code>/api/shared-openclaw/runs/:id/wait</code>，最后读取
+                <code>/api/shared-openclaw/sessions/:key</code> 展示真实回复。
+              </div>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="prompt-row">
+              <button id="preset-button" class="button" type="button">填入空白点 prompt</button>
+              <button id="new-session-button" class="button" type="button">新会话</button>
+              <button id="refresh-button" class="button" type="button">刷新会话</button>
+            </div>
+            <textarea id="chat-input" spellcheck="false"></textarea>
+            <div class="composer-actions">
+              <div id="run-status" class="status-line">等待发送。</div>
+              <button id="send-button" class="button primary" type="button">发送并计时</button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="side-panel">
+          <section class="side-section">
+            <div class="side-section-header">
+              <div>
+                <h2 class="title">本次运行</h2>
+                <p class="hint">真实 chat 的 session/run 状态。</p>
+              </div>
+              <span id="run-badge" class="badge">idle</span>
+            </div>
+            <div class="side-body">
+              <div class="metric-grid">
+                <div class="metric">
+                  <div class="metric-label">elapsed</div>
+                  <div id="elapsed-metric" class="metric-value">-</div>
+                </div>
+                <div class="metric">
+                  <div class="metric-label">status</div>
+                  <div id="status-metric" class="metric-value">-</div>
+                </div>
+              </div>
+              <div class="info-card">
+                <div class="small-label">session</div>
+                <p id="session-key" class="mono">-</p>
+              </div>
+              <div class="info-card">
+                <div class="small-label">run</div>
+                <p id="run-id" class="mono">-</p>
+              </div>
+              <div class="info-card">
+                <div class="small-label">本页运行记录</div>
+                <p>当前 chat 的真实记录，点击可直接打开对应会话。</p>
+                <div id="live-run-list" class="session-list"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="side-section">
+            <div class="side-section-header">
+              <div>
+                <h2 class="title">容器与逻辑隔离实现落点</h2>
+                <p class="hint">后端读取当前代码文件，展示 <code>RuntimeRun</code> 和 <code>X-Hermes-Session-Key</code> 的实现位置。</p>
+              </div>
+              <span class="badge ok">shared Hermes</span>
+            </div>
+            <div id="implementation-body" class="side-body">
+              <div class="hint">等待后端返回实现落点。</div>
+            </div>
+          </section>
+
+          <section class="side-section">
+            <div class="side-section-header">
+              <div>
+                <h2 class="title">隔离演示</h2>
+                <p class="hint">同一个 shared Hermes 容器中模拟两个 session 前缀，不切换真实账户。</p>
+              </div>
+              <span id="isolation-badge" class="badge">ready</span>
+            </div>
+            <div id="isolation-demo-body" class="side-body"></div>
+          </section>
+
+          <section class="side-section">
+            <div class="side-section-header">
+              <div>
+                <h2 class="title">会话历史</h2>
+                <p class="hint">进入 demo 后显示 shared workspace 里的会话。</p>
+              </div>
+              <span id="session-count" class="badge">0</span>
+            </div>
+            <div id="session-list" class="side-body session-list"></div>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script>
+      const DEFAULT_API_BASE = "";
+      const API_BASE = (
+        new URLSearchParams(window.location.search).get("apiBase") || DEFAULT_API_BASE
+      ).replace(/\/+$/, "");
+      const IMPLEMENTATION_URL = "/api/medical-research-demo/implementation";
+      const COMPLETED_RUN_STATUSES = new Set(["completed", "ok", "success", "done"]);
+      const FAILED_RUN_STATUSES = new Set(["failed", "error"]);
+      const ACCESS_TOKEN_KEY = "medical-research-agent-demo-access-token";
+      const REFRESH_TOKEN_KEY = "medical-research-agent-demo-refresh-token";
+      const LIVE_RUNS_KEY = "medical-research-agent-demo-live-runs";
+      const DEFAULT_BLANK_PROMPT =
+        "请使用 medical-research-agent 对“结直肠癌类器官用于化疗耐药机制研究”做一次空白点挖掘。\\n" +
+        "必须实际调用该技能的 scripts/search.py 进行文献检索；为评估端到端速度，请只做一次调用，传入 6-8 个关键词并使用 --output 保存结果。\\n" +
+        "不要读取完整 JSON，优先使用命令行摘要生成简版 Markdown 报告：3 个研究方向、3 个知识缺口、3 条参考文献线索。\\n" +
+        "禁止读取或抽查输出 JSON，也不要额外运行统计脚本；用一次检索命令返回的 compact summary 完成。\\n" +
+        "不要仅凭常识直接回答；若检索失败，也要说明已尝试的检索命令和失败原因。";
+
+      function loadStoredLiveRuns() {
+        try {
+          const runs = JSON.parse(localStorage.getItem(LIVE_RUNS_KEY) || "[]");
+          return Array.isArray(runs) ? runs.slice(0, 20) : [];
+        } catch {
+          return [];
+        }
+      }
+
+      const state = {
+        accessToken: localStorage.getItem(ACCESS_TOKEN_KEY) || "",
+        refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY) || "",
+        user: null,
+        agentInfo: null,
+        sessions: [],
+        sessionKey: "",
+        messages: [],
+        runId: "",
+        running: false,
+        startedAt: 0,
+        timerId: 0,
+        implementationEvidence: [],
+        isolationResult: "",
+        liveRuns: loadStoredLiveRuns()
+      };
+
+      const $ = (id) => document.getElementById(id);
+
+      const escapeHtml = (value) =>
+        String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+
+      const fmtSeconds = (ms) => {
+        if (!Number.isFinite(ms)) return "-";
+        if (ms < 1000) return `${Math.round(ms)}ms`;
+        return `${(ms / 1000).toFixed(1)}s`;
+      };
+
+      function apiUrl(path) {
+        if (!path || path.startsWith("#")) return path || "";
+        if (/^https?:\/\//i.test(path)) return path;
+        if (!API_BASE) return path.startsWith("/") ? path : `/${path}`;
+        return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+      }
+
+      const setTokens = (access, refresh) => {
+        state.accessToken = access || "";
+        state.refreshToken = refresh || "";
+        localStorage.setItem(ACCESS_TOKEN_KEY, state.accessToken);
+        localStorage.setItem(REFRESH_TOKEN_KEY, state.refreshToken);
+      };
+
+      const loadLocalCredentials = () => {
+        state.accessToken = localStorage.getItem(ACCESS_TOKEN_KEY) || "";
+        state.refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY) || "";
+      };
+
+      async function parseError(response) {
+        const fallback = `请求失败 (${response.status})`;
+        const body = await response.text().catch(() => "");
+        if (!body) return fallback;
+        try {
+          const parsed = JSON.parse(body);
+          return parsed.detail || parsed.message || body || fallback;
+        } catch {
+          return body || fallback;
+        }
+      }
+
+      async function refreshLocalCredential() {
+        loadLocalCredentials();
+        if (!state.refreshToken) return false;
+        const response = await fetch(apiUrl("/api/auth/refresh"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: state.refreshToken })
+        });
+        if (!response.ok) return false;
+        const payload = await response.json();
+        setTokens(payload.access_token, payload.refresh_token);
+        return true;
+      }
+
+      async function api(path, options = {}, retryOnUnauthorized = true) {
+        const headers = {
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        };
+        if (state.accessToken) headers.Authorization = `Bearer ${state.accessToken}`;
+        const response = await fetch(apiUrl(path), { ...options, headers });
+        if (response.status === 401 && retryOnUnauthorized && (await refreshLocalCredential())) {
+          return api(path, options, false);
+        }
+        if (!response.ok) throw new Error(await parseError(response));
+        if (response.status === 204) return {};
+        const text = await response.text();
+        return text ? JSON.parse(text) : {};
+      }
+
+      function renderAuth() {
+        const hasLocalCredential = Boolean(state.user);
+        $("auth-badge").textContent = hasLocalCredential
+          ? `临时身份 / ${state.user.runtime_mode}`
+          : "等待凭证";
+        $("auth-badge").className = hasLocalCredential ? "badge ok" : "badge warn";
+        const runtimeHandle =
+          state.agentInfo?.workspace_dir || state.agentInfo?.defaultId || state.agentInfo?.agent_id || "-";
+        $("runtime-hint").textContent = hasLocalCredential
+          ? `shared runtime: ${runtimeHandle}`
+          : "点击“一键创建临时演示身份”后，本页会调用服务器 API 获取临时 shared 凭证。";
+        $("send-button").disabled = !hasLocalCredential || state.running;
+      }
+
+      function renderMessages() {
+        if (!state.messages.length) {
+          $("messages").innerHTML = `
+            <div class="empty">
+              <div>
+                <strong>准备运行空白点挖掘。</strong><br />
+                默认走 <code>/api/shared-openclaw/chat</code>，这是当前 Hermes shared warm path。
+              </div>
+            </div>
+          `;
+          return;
+        }
+
+        $("messages").innerHTML = state.messages
+          .map((message) => {
+            const role = message.role || "assistant";
+            const content = message.content || "";
+            const label = role === "user" ? "你" : role === "system" ? "系统" : "医学科研智能体";
+            return `
+              <div class="message ${escapeHtml(role)}">
+                <div class="message-meta">${escapeHtml(label)}${message.timestamp ? ` · ${escapeHtml(message.timestamp)}` : ""}</div>
+                <div class="bubble">${escapeHtml(content)}</div>
+              </div>
+            `;
+          })
+          .join("");
+        $("messages").scrollTop = $("messages").scrollHeight;
+      }
+
+      function renderRunStatus(statusText = "") {
+        const elapsed = state.startedAt ? performance.now() - state.startedAt : NaN;
+        $("elapsed-metric").textContent = state.running ? fmtSeconds(elapsed) : "-";
+        $("status-metric").textContent = statusText || (state.running ? "running" : "-");
+        $("run-badge").textContent = state.running ? "running" : statusText || "idle";
+        $("run-badge").className = state.running ? "badge warn" : "badge";
+        $("session-key").textContent = state.sessionKey || "-";
+        $("run-id").textContent = state.runId || "-";
+        $("run-status").textContent = statusText || (state.running ? `运行中 ${fmtSeconds(elapsed)}` : "等待发送。");
+      }
+
+      function startTimer() {
+        stopTimer();
+        state.timerId = window.setInterval(() => renderRunStatus(), 500);
+      }
+
+      function stopTimer() {
+        if (state.timerId) window.clearInterval(state.timerId);
+        state.timerId = 0;
+      }
+
+      function renderSessions() {
+        const sessions = state.sessions
+          .map((session) => ({
+            ...session,
+            key: session.key || session.sessionKey || session.session_id || ""
+          }))
+          .filter((session) => session.key);
+        $("session-count").textContent = String(sessions.length);
+        if (!sessions.length) {
+          $("session-list").innerHTML = '<div class="hint">暂无会话。</div>';
+          return;
+        }
+        $("session-list").innerHTML = sessions
+          .map(
+            (session) => `
+              <button class="session-item ${session.key === state.sessionKey ? "active" : ""}" data-session-key="${escapeHtml(
+                session.key
+              )}" type="button">
+                <strong>${escapeHtml(session.title || session.key)}</strong>
+                <p class="mono">${escapeHtml(session.key)}</p>
+                ${
+                  session.localOnly
+                    ? '<p>当前页面兜底记录；后端列表未及时返回时仍可打开。</p>'
+                    : ""
+                }
+              </button>
+            `
+          )
+          .join("");
+        document.querySelectorAll("[data-session-key]").forEach((button) => {
+          button.addEventListener("click", () => loadSession(button.getAttribute("data-session-key")));
+        });
+      }
+
+      function renderImplementation() {
+        const items = state.implementationEvidence || [];
+        $("implementation-body").innerHTML =
+          items
+            .map(
+              (item) => `
+                <div class="info-card">
+                  <div class="small-label">${escapeHtml(item.label)}</div>
+                  <p class="mono">${escapeHtml(item.file)}:${escapeHtml(item.line)}</p>
+                  <p><code>${escapeHtml(item.symbol)}</code></p>
+                  <p>${escapeHtml(item.code)}</p>
+                </div>
+              `
+            )
+            .join("") || '<div class="hint">后端未返回实现落点。</div>';
+      }
+
+      function renderIsolationDemo() {
+        const resultHtml = state.isolationResult
+          ? `
+            <div class="info-card">
+              <div class="small-label">检查结果</div>
+              <p><strong>${escapeHtml(state.isolationResult)}</strong></p>
+              <p>模拟 user-b 读取 <code>agent:usr_alpha:session-001</code>，前缀不匹配时由 <code>ensure_session_owned</code> 拒绝；run 查询再由 <code>RuntimeRun.user_id</code> 兜底。</p>
+            </div>
+          `
+          : "";
+        $("isolation-demo-body").innerHTML = `
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="metric-label">shared container</div>
+              <div class="metric-value">1</div>
+              <div class="metric-foot">openclaw-shared / Hermes</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">logic lanes</div>
+              <div class="metric-value">2</div>
+              <div class="metric-foot">usr_alpha / usr_beta</div>
+            </div>
+          </div>
+          <div class="info-card">
+            <div class="small-label">user-a</div>
+            <p class="mono">agent:usr_alpha:session-001</p>
+            <p><code>RuntimeRun(user_id="alpha", run_id="run_alpha")</code></p>
+          </div>
+          <div class="info-card">
+            <div class="small-label">user-b</div>
+            <p class="mono">agent:usr_beta:session-001</p>
+            <p><code>RuntimeRun(user_id="beta", run_id="run_beta")</code></p>
+          </div>
+          <button id="isolation-demo-button" class="button" type="button">模拟越界读取</button>
+          ${resultHtml}
+        `;
+        $("isolation-demo-button").addEventListener("click", simulateIsolationCheck);
+        $("isolation-badge").textContent = state.isolationResult ? "blocked" : "ready";
+        $("isolation-badge").className = state.isolationResult ? "badge ok" : "badge";
+      }
+
+      function simulateIsolationCheck() {
+        state.isolationResult = "越界读取被拒绝";
+        renderIsolationDemo();
+      }
+
+      function saveLiveRuns() {
+        localStorage.setItem(LIVE_RUNS_KEY, JSON.stringify(state.liveRuns.slice(0, 20)));
+      }
+
+      function upsertLiveRun(run) {
+        const localRunId = run.localRunId || run.runId || run.sessionKey;
+        if (!localRunId) return;
+        const existing = state.liveRuns.find((item) => item.localRunId === localRunId) || {};
+        const next = { ...existing, ...run, localRunId };
+        state.liveRuns = [next, ...state.liveRuns.filter((item) => item.localRunId !== localRunId)].slice(0, 20);
+        saveLiveRuns();
+        renderLiveRuns();
+      }
+
+      function renderLiveRuns() {
+        const target = $("live-run-list");
+        if (!target) return;
+        if (!state.liveRuns.length) {
+          target.innerHTML = '<div class="hint">暂无本页运行记录。发送后会在这里留下当前 chat 的真实记录。</div>';
+          return;
+        }
+        target.innerHTML = state.liveRuns
+          .map((run) => {
+            const status = run.status === "completed" ? "完成" : run.status === "error" ? "失败" : "运行中";
+            const startedAt = run.startedAt ? new Date(run.startedAt).toLocaleString("zh-CN") : "-";
+            const prompt = String(run.prompt || "").slice(0, 72);
+            return `
+              <div class="session-item ${run.sessionKey === state.sessionKey ? "active" : ""}">
+                <button class="button" type="button" data-live-session-key="${escapeHtml(run.sessionKey || "")}" ${
+                  run.sessionKey ? "" : "disabled"
+                }>打开会话</button>
+                <p><strong>${escapeHtml(status)}</strong> / ${escapeHtml(fmtSeconds(run.elapsedMs))}</p>
+                <p class="mono">${escapeHtml(run.sessionKey || run.runId || run.localRunId)}</p>
+                <p>${escapeHtml(startedAt)} · ${escapeHtml(prompt)}</p>
+                ${run.error ? `<p>${escapeHtml(run.error)}</p>` : ""}
+              </div>
+            `;
+          })
+          .join("");
+        document.querySelectorAll("[data-live-session-key]").forEach((button) => {
+          button.addEventListener("click", () => loadSession(button.getAttribute("data-live-session-key")));
+        });
+      }
+
+      function mergeCurrentSessionIntoHistory(sessions) {
+        const items = Array.isArray(sessions) ? sessions : [];
+        if (!state.sessionKey) return items;
+        const alreadyListed = items.some((session) => {
+          const key = session?.key || session?.sessionKey || session?.session_id || "";
+          return key === state.sessionKey;
+        });
+        if (alreadyListed) return items;
+        const firstUserMessage = state.messages.find((message) => message.role === "user")?.content || "";
+        const title = firstUserMessage ? `当前会话：${firstUserMessage.slice(0, 28)}` : "当前会话";
+        return [
+          {
+            key: state.sessionKey,
+            sessionKey: state.sessionKey,
+            title,
+            updatedAt: new Date().toISOString(),
+            localOnly: true
+          },
+          ...items
+        ];
+      }
+
+      async function refreshImplementationData() {
+        try {
+          const payload = await api(IMPLEMENTATION_URL);
+          state.implementationEvidence = Array.isArray(payload.evidence) ? payload.evidence : [];
+        } catch (error) {
+          state.implementationEvidence = [];
+          $("implementation-body").innerHTML = `<div class="hint">后端未连接或 implementation API 不可用：${escapeHtml(error.message)}</div>`;
+        }
+        renderImplementation();
+      }
+
+      async function refreshIdentity() {
+        if (!state.accessToken) {
+          state.user = null;
+          state.agentInfo = null;
+          renderAuth();
+          return;
+        }
+        state.user = await api("/api/auth/me");
+        state.agentInfo = await api("/api/shared-openclaw/me");
+        renderAuth();
+        await refreshSessions();
+      }
+
+      async function refreshSessions() {
+        if (!state.accessToken) return;
+        const sessions = await api("/api/shared-openclaw/sessions");
+        state.sessions = mergeCurrentSessionIntoHistory(sessions);
+        renderSessions();
+      }
+
+      async function loadSession(sessionKey) {
+        if (!sessionKey) return;
+        const detail = await api(`/api/shared-openclaw/sessions/${encodeURIComponent(sessionKey)}`);
+        state.sessionKey = detail.key || detail.sessionKey || sessionKey;
+        state.messages = Array.isArray(detail.messages) ? detail.messages : [];
+        state.sessions = mergeCurrentSessionIntoHistory(state.sessions);
+        renderMessages();
+        renderSessions();
+        renderRunStatus("session loaded");
+      }
+
+      function createTemporaryCredentials() {
+        const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        return {
+          username: `mentor_demo_${suffix}`,
+          email: `mentor_demo_${suffix}@medical-demo.local`,
+          password: `Demo_${suffix}_Pass_123`
+        };
+      }
+
+      async function createTemporaryIdentity() {
+        const credentials = createTemporaryCredentials();
+        renderRunStatus("creating identity");
+        const payload = await api(
+          "/api/auth/register",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              username: credentials.username,
+              email: credentials.email,
+              password: credentials.password,
+              runtime_mode: "shared"
+            })
+          },
+          false
+        );
+        setTokens(payload.access_token, payload.refresh_token);
+        await refreshIdentity();
+        renderRunStatus("credential ready");
+      }
+
+      async function ensureLocalCredential() {
+        if (state.user) return;
+        loadLocalCredentials();
+        if (state.accessToken) {
+          try {
+            await refreshIdentity();
+            return;
+          } catch {
+            state.user = null;
+            state.agentInfo = null;
+          }
+        }
+        await createTemporaryIdentity();
+      }
+
+      async function resetDemoState() {
+        state.user = null;
+        state.agentInfo = null;
+        state.sessions = [];
+        state.sessionKey = "";
+        state.runId = "";
+        state.messages = [];
+        state.isolationResult = "";
+        state.liveRuns = [];
+        localStorage.removeItem(LIVE_RUNS_KEY);
+        loadLocalCredentials();
+        renderAuth();
+        renderMessages();
+        renderSessions();
+        renderLiveRuns();
+        renderIsolationDemo();
+        renderRunStatus("demo reset");
+      }
+
+      function extractRunFailure(payload) {
+        if (typeof payload?.error === "string" && payload.error.trim()) return payload.error.trim();
+        if (typeof payload?.message?.content === "string" && payload.message.content.trim()) {
+          return payload.message.content.trim();
+        }
+        const failedEvent = (payload.events || []).find(
+          (event) => event?.event === "run.failed" || event?.type === "run.failed" || event?.error
+        );
+        if (typeof failedEvent?.error === "string" && failedEvent.error.trim()) return failedEvent.error.trim();
+        return "Agent 运行失败";
+      }
+
+      async function waitForRun(runId) {
+        const started = performance.now();
+        let lastPayload = null;
+        while (performance.now() - started < 240000) {
+          const payload = await api(`/api/shared-openclaw/runs/${encodeURIComponent(runId)}/wait?timeoutMs=15000`);
+          lastPayload = payload;
+          const status = String(payload.status || "pending").toLowerCase();
+          renderRunStatus(status);
+          if (COMPLETED_RUN_STATUSES.has(status)) return payload;
+          if (FAILED_RUN_STATUSES.has(status)) {
+            throw new Error(extractRunFailure(payload));
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+        return lastPayload || { status: "timeout" };
+      }
+
+      async function sendMessage() {
+        const message = $("chat-input").value.trim();
+        if (!message) throw new Error("请输入要发送的内容");
+        await ensureLocalCredential();
+
+        const localRunId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const startedAt = new Date().toISOString();
+        state.running = true;
+        state.startedAt = performance.now();
+        state.runId = "";
+        state.messages = [...state.messages, { role: "user", content: message, timestamp: new Date().toLocaleString("zh-CN") }];
+        upsertLiveRun({ localRunId, status: "running", startedAt, prompt: message, elapsedMs: 0 });
+        renderMessages();
+        renderRunStatus("sending");
+        startTimer();
+        $("send-button").disabled = true;
+
+        try {
+          const sendPayload = await api("/api/shared-openclaw/chat", {
+            method: "POST",
+            body: JSON.stringify({ message, session_key: state.sessionKey || "" })
+          });
+          state.sessionKey = sendPayload.session_key || sendPayload.sessionKey || state.sessionKey;
+          state.runId = sendPayload.run_id || sendPayload.runId || "";
+          upsertLiveRun({
+            localRunId,
+            runId: state.runId,
+            sessionKey: state.sessionKey,
+            status: "running",
+            elapsedMs: performance.now() - state.startedAt
+          });
+          renderRunStatus("run created");
+
+          let waitPayload = null;
+          if (state.runId) waitPayload = await waitForRun(state.runId);
+          const assistantMessage = waitPayload?.message?.content;
+          if (assistantMessage) {
+            state.messages = [...state.messages, { role: "assistant", content: assistantMessage, timestamp: new Date().toLocaleString("zh-CN") }];
+            renderMessages();
+          }
+
+          if (state.sessionKey) await loadSession(state.sessionKey);
+          await refreshSessions();
+          const elapsedMs = performance.now() - state.startedAt;
+          upsertLiveRun({
+            localRunId,
+            runId: state.runId,
+            sessionKey: state.sessionKey,
+            status: "completed",
+            endedAt: new Date().toISOString(),
+            elapsedMs
+          });
+          state.running = false;
+          renderRunStatus(`完成，用时 ${fmtSeconds(elapsedMs)}`);
+        } catch (error) {
+          upsertLiveRun({
+            localRunId,
+            runId: state.runId,
+            sessionKey: state.sessionKey,
+            status: "error",
+            endedAt: new Date().toISOString(),
+            elapsedMs: performance.now() - state.startedAt,
+            error: error.message || "Agent 运行失败"
+          });
+          state.running = false;
+          renderRunStatus(error.message || "error");
+          throw error;
+        } finally {
+          state.running = false;
+          stopTimer();
+          $("send-button").disabled = !state.user;
+        }
+      }
+
+      function bindActions() {
+        $("chat-input").value = DEFAULT_BLANK_PROMPT;
+        $("preset-button").addEventListener("click", () => {
+          $("chat-input").value = DEFAULT_BLANK_PROMPT;
+          $("chat-input").focus();
+        });
+        $("new-session-button").addEventListener("click", () => {
+          state.sessionKey = "";
+          state.runId = "";
+          state.messages = [];
+          renderMessages();
+          renderSessions();
+          renderRunStatus("new session");
+        });
+        $("refresh-button").addEventListener("click", async () => {
+          try {
+            if (state.sessionKey) await loadSession(state.sessionKey);
+            await refreshSessions();
+            await refreshImplementationData();
+          } catch (error) {
+            pushSystemMessage(error.message);
+          }
+        });
+        $("demo-access-button").addEventListener("click", () => handleAction(createTemporaryIdentity));
+        $("reset-demo-button").addEventListener("click", () => handleAction(resetDemoState));
+        $("send-button").addEventListener("click", () => handleAction(sendMessage));
+        $("chat-input").addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            handleAction(sendMessage);
+          }
+        });
+      }
+
+      function pushSystemMessage(content) {
+        state.messages = [...state.messages, { role: "system", content, timestamp: new Date().toLocaleString("zh-CN") }];
+        renderMessages();
+      }
+
+      async function handleAction(action) {
+        try {
+          await action();
+        } catch (error) {
+          pushSystemMessage(error.message || "操作失败");
+          renderRunStatus(error.message || "error");
+        }
+      }
+
+      async function init() {
+        bindActions();
+        renderAuth();
+        renderMessages();
+        renderRunStatus();
+        renderSessions();
+        renderLiveRuns();
+        renderIsolationDemo();
+        await refreshImplementationData();
+        if (state.accessToken) {
+          try {
+            await refreshIdentity();
+          } catch (error) {
+            state.accessToken = "";
+            state.refreshToken = "";
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            localStorage.removeItem(REFRESH_TOKEN_KEY);
+            renderAuth();
+          }
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

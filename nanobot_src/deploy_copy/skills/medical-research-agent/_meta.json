@@ -1,0 +1,15 @@
+{
+  "ownerId": "yifu-anfc5wj84icvivsjanxa4e9ewl3hxlzi",
+  "slug": "medical-research-agent",
+  "version": "1.0.3",
+  "publishedAt": 1777429955228,
+  "changelog": [
+    {
+      "version": "1.0.3",
+      "date": "2026-05-18",
+      "changes": [
+        "hermes版本"
+      ]
+    }
+  ]
+}

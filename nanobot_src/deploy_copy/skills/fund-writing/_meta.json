@@ -1,0 +1,15 @@
+{
+  "ownerId": "yifu-anfc5wj84icvivsjanxa4e9ewl3hxknm",
+  "slug": "fund-writing",
+  "version": "1.0.0",
+  "publishedAt": 1777429955228,
+  "changelog": [
+    {
+      "version": "1.0.0",
+      "date": "2026-05-18",
+      "changes": [
+        "基金撰写"
+      ]
+    }
+  ]
+}

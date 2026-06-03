@@ -1,0 +1,5 @@
+Host gitee.com
+  HostName gitee.com
+  User git
+  IdentityFile ~/.ssh/id_rsa
+  StrictHostKeyChecking no
