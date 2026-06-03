@@ -8,7 +8,7 @@
 > - **OPD**（Online Policy Distillation，在线策略蒸馏）：框架名称，通用概念
 > - **OPSD**（Online Policy **Self**-Distillation，在线策略**自**蒸馏）：第一轮实验的具体实现——teacher 和 student 是同一个模型，通过 hint augmentation 实现自我改进
 > - **OPCD**（On-Policy Continual Distillation）：论文（arXiv 2602.12275）中对 OPSD 这类方法的学术称呼
-> - **GPT judge OPD**：第二轮实验——judge 换成外部 GPT-5.4，teacher logprobs 仍由本地模型提供
+> - **OPSD + 外部 judge**：第二轮实验——judge 换成 GPT-5.4 生成更高质量 hint，但 teacher（提供 logprobs）仍是本地 Qwen3.5-9B，本质仍是自蒸馏（teacher=student），只是评判信号更强。真正的 OPD 需要 teacher 也是更强的外部模型提供 logprobs，闭源模型做不到
 
 ---
 
@@ -63,13 +63,15 @@ loss = -(teacher_logprob - student_logprob)
 
 ### Self-OPCD vs OPD with External Teacher
 
-| | Self-OPCD（本次实验一） | GPT-5.4 Judge + 本地 Teacher（实验二） |
+| | OPSD Run 1 | OPSD + 外部 judge（Run 2） | 真正的 OPD（理论，暂不可行）|
 |--|--|--|
-| Judge | 本地 Qwen3.5-9B | GPT-5.4（外部 API） |
-| Teacher logprobs | 本地 Qwen3.5-9B | 本地 Qwen3.5-9B |
-| Hint 质量 | 受限于自身能力 | 更强，见过更多医学知识 |
-| 是否需要外部 logprobs | 否 | **否**（GPT 只生成 hint 文本，不需要 logprobs） |
-| 成本 | 纯本地，零 API 费用 | 每条对话调用 3 次 GPT |
+| **Judge** | 本地 Qwen3.5-9B | **GPT-5.4（外部 API）** | 更强外部模型 |
+| **Teacher**（提供 logprobs） | 本地 Qwen3.5-9B | 本地 Qwen3.5-9B | **更强外部模型（需要 logprobs）** |
+| **Student** | Qwen3.5-9B | Qwen3.5-9B | 小模型 |
+| teacher = student？ | ✅ 是（自蒸馏） | ✅ 是（仍然自蒸馏） | ❌ 否 |
+| Hint 质量 | 受限于自身能力 | **更强**，GPT 见过更多知识 | 最强 |
+| 闭源模型可行？ | ✅ | ✅ | ❌（需要 logprobs） |
+| 成本 | 纯本地 | 每条调用 3 次 GPT API | — |
 
 **关键洞察**：闭源大模型（GPT-4/Claude）没有 logprobs，但可以作为 **judge/hint 生成器**，而 teacher logprobs 仍然由本地模型提供。这是完全合法的架构。
 
