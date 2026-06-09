@@ -1,14 +1,87 @@
-# 医学 Agent 在线策略蒸馏（OPSD / OPCD）实验记录
+# 医学 Agent 在线策略蒸馏（OPSD / OPCD / OPD）实验记录
 
-> **项目目标**：将线上医学 Agent（nanobot）接入 OpenClaw-RL 框架，通过在线策略自蒸馏（OPSD）实时训练本地医学语言模型，提升问答质量。
+> **项目目标**：将线上医学 Agent（nanobot）接入 OpenClaw-RL 框架，通过在线策略蒸馏（OPD）实时训练本地医学语言模型，提升问答质量。
 >
-> **当前进展**：完成了 OPSD 端到端验证（Qwen3.5-9B，2000条华佗数据，110个梯度步，A800 80GB），并进一步接入 GPT-5.4 外部 judge（变为真正的 OPD），进行第二轮训练。
+> **当前最佳结果**（Run6，2026-06-09）：Qwen3-32B teacher → Qwen3-8B student，无 judge，delta **+0.130**（相比 Run1 的 -0.053 提升了 0.183 分）
 >
 > **术语说明**：
 > - **OPD**（Online Policy Distillation，在线策略蒸馏）：框架名称，通用概念
-> - **OPSD**（Online Policy **Self**-Distillation，在线策略**自**蒸馏）：第一轮实验的具体实现——teacher 和 student 是同一个模型，通过 hint augmentation 实现自我改进
+> - **OPSD**（Online Policy **Self**-Distillation，在线策略**自**蒸馏）：teacher = student（同模型自蒸馏）
 > - **OPCD**（On-Policy Continual Distillation）：论文（arXiv 2602.12275）中对 OPSD 这类方法的学术称呼
-> - **OPSD + 外部 judge**：第二轮实验——judge 换成 GPT-5.4 生成更高质量 hint，但 teacher（提供 logprobs）仍是本地 Qwen3.5-9B，本质仍是自蒸馏（teacher=student），只是评判信号更强。真正的 OPD 需要 teacher 也是更强的外部模型提供 logprobs，闭源模型做不到
+> - **纯 OPD**：teacher 为真正的大模型（Qwen3-32B），student 为小模型（Qwen3-8B），无 judge 过滤
+
+---
+
+## Run 历史总览
+
+| Run | 分支 | Student | Teacher | Judge | LR | 步数 | 接受率 | 初始Loss | 末步Loss | **Delta** |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Run1 | master (原) | Qwen3.5-9B | 9B(self) | 9B(self) | 5e-7 | 110 | 88% | -0.78 | -0.80 | -0.053 |
+| Run2 | run2-gpt-judge-analysis | Qwen3.5-9B | 9B(self) | GPT-5.4 | 5e-7 | 48 | ~83% | — | — | N/A |
+| Run3 | run3 | Qwen3.5-9B | 9B(self) | GPT-5.4 | 1e-6 | 116 | ~83% | — | — | N/A |
+| Run4 | **run4** | Qwen3.5-9B | 9B(self) | GPT-5.4 | **2e-6** | 109 | ~83% | -0.72 | -0.58 | **-0.090** |
+| Run5 | **run5-opcd** | Qwen3-8B | **32B(真实)** | GPT-5.4 | 1e-6 | 233 | 83.1% | -0.16 | -0.90 | **+0.070** |
+| Run6 | **run6-nojudge** | Qwen3-8B | **32B(真实)** | **无** | 1e-6 | 229 | **100%** | -0.43 | -1.08 | **+0.130** |
+
+> 详细分析见各分支 README：[Run4](https://github.com/Ctrl-Alt-Wang/OnPolicy-openclaw/tree/run4/runs/run4) · [Run5](https://github.com/Ctrl-Alt-Wang/OnPolicy-openclaw/tree/run5-opcd/runs/run5) · [Run6](https://github.com/Ctrl-Alt-Wang/OnPolicy-openclaw/tree/run6-nojudge/runs/run6)
+
+---
+
+## 核心发现：替身问题（Surrogate Teacher Problem）
+
+**这是贯穿 Run1~5 的根本缺陷，在 Run6 中被解决。**
+
+### 什么是替身问题？
+
+在 OPCD/OPSD 框架中，teacher logprobs 不是在原始问题 `x` 上计算的，而是在 hint-augmented 上下文 `x + hint` 上计算的：
+
+```
+原始问题（student 推理时见到的）:
+  User: "请问糖尿病二型如何治疗？"
+
+hint-augmented（teacher 计算 logprobs 时见到的）:
+  User: "请问糖尿病二型如何治疗？"
+  Hint: "你的回答遗漏了生活方式干预，应补充饮食控制和运动疗法..."
+
+student 学习目标: max P_teacher(y | x + hint)
+student 推理时: 只能用 P_student(y | x)
+→ 训练目标和推理场景不对齐！
+```
+
+这个 hint-augmented teacher 是真实 teacher 的"替身"——它被 hint 操控，其分布不代表真实大模型在自然问题上的分布。
+
+### 量化证据
+
+| 指标 | Run5（有 judge，替身）| Run6（无 judge，真实） |
+|---|---|---|
+| 初始 loss | **-0.16**（KL 散度被 hint 压缩）| **-0.43**（真实知识差距） |
+| 末步 loss | -0.90 | **-1.08** |
+| 接受率 | 83.1% | **100%** |
+| 评测 delta | +0.070 | **+0.130（+86%）** |
+
+> Run5 的 -0.16 初始 loss 揭示了问题：hint-augmented teacher 和 student 的分布人为地很接近，真正的知识差距被掩盖了。Run6 的 -0.43 才是 8B vs 32B 的真实距离。
+
+### 各 Run 失败/成功原因链
+
+```
+Run1（lr=5e-7, 自蒸馏）→ delta -0.053
+  ↓ 问题: 自蒸馏无法引入新知识 + hint 质量受限于模型自身
+
+Run2/3（GPT-5.4 judge, 自蒸馏）→ N/A（步数太少/loss W型）
+  ↓ 改进: judge 质量提升
+  ↓ 问题: teacher 仍是自身，替身问题依旧
+
+Run4（lr=2e-6，自蒸馏）→ delta -0.090
+  ↓ 问题: LR 过大（loss 不收敛）+ 自蒸馏循环游戏
+
+Run5（32B teacher + GPT judge）→ delta +0.070
+  ↓ 改进: 真实大模型 teacher 带来真实知识差距
+  ↓ 问题: 替身问题（hint-augmented 上下文）+ 17% 样本被丢弃
+
+Run6（32B teacher + 无 judge）→ delta +0.130 ✓
+  ✓ 修复: teacher 在原始上下文计算 logprobs，消除替身
+  ✓ 修复: 100% 样本接受率，包括正向对齐信号
+```
 
 ---
 
