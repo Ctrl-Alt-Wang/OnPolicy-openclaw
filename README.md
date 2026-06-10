@@ -35,6 +35,22 @@ Run3:
 Run4:
 <img width="2400" height="903" alt="image" src="https://github.com/user-attachments/assets/30e2da9a-3d0b-4fb2-b1b5-d2f19fb70b27" />
 
+
+Run5:
+<img width="2391" height="903" alt="image" src="https://github.com/user-attachments/assets/457b44c3-0e7b-485e-93e3-59a10bc88cfa" />
+
+
+Run6:
+<img width="2406" height="897" alt="image" src="https://github.com/user-attachments/assets/412cfe40-d5c2-4ee0-bf03-f5df54014de8" />
+
+Run7:
+<img width="2382" height="888" alt="image" src="https://github.com/user-attachments/assets/44db0da3-a996-4b20-937a-c42378bbd99d" />
+<img width="2403" height="894" alt="image" src="https://github.com/user-attachments/assets/4a4a84b8-1654-432e-9c03-2009056bba72" />
+Real Run7:
+<img width="2393" height="918" alt="image" src="https://github.com/user-attachments/assets/33319889-4e52-48bc-8835-e7a087950ee6" />
+<img width="2424" height="912" alt="image" src="https://github.com/user-attachments/assets/e8d81353-cd0f-4385-87dc-9b62aca6025d" />
+
+
 ## 核心发现：替身问题（Surrogate Teacher Problem）
 
 **这是贯穿 Run1~5 的根本缺陷，在 Run6 中被解决。**
