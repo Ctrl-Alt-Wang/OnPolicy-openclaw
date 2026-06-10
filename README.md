@@ -26,6 +26,14 @@
 > 详细分析见各分支 README：[Run4](https://github.com/Ctrl-Alt-Wang/OnPolicy-openclaw/tree/run4/runs/run4) · [Run5](https://github.com/Ctrl-Alt-Wang/OnPolicy-openclaw/tree/run5-opcd/runs/run5) · [Run6](https://github.com/Ctrl-Alt-Wang/OnPolicy-openclaw/tree/run6-nojudge/runs/run6)
 
 ---
+Run1:
+<img width="2445" height="885" alt="image" src="https://github.com/user-attachments/assets/edb07f31-4b11-44f9-8c42-b485ef5b63ba" />
+Run2:
+<img width="2421" height="900" alt="image" src="https://github.com/user-attachments/assets/0d327d5e-24d7-4c04-996c-1ef04792190c" />
+Run3:
+<img width="2406" height="926" alt="image" src="https://github.com/user-attachments/assets/02d327e8-b1b6-45e0-b07e-891c8e954e2e" />
+Run4:
+<img width="2400" height="903" alt="image" src="https://github.com/user-attachments/assets/30e2da9a-3d0b-4fb2-b1b5-d2f19fb70b27" />
 
 ## 核心发现：替身问题（Surrogate Teacher Problem）
 
