@@ -235,6 +235,7 @@ teacher 在固定的原始上下文上计算 logprobs，而 student 在训练中
 | Delta | N/A | N/A | -0.090 | +0.070 | **+0.130** |
 
 ---
+<img width="2409" height="900" alt="image" src="https://github.com/user-attachments/assets/e0529599-9ec3-46b0-a9e3-de7592773952" />
 
 ## 8. 文件索引
 
