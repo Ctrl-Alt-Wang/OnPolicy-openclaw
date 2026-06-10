@@ -1,252 +1,266 @@
-# Run6：纯 OPD 无 Judge（Qwen3-32B teacher → Qwen3-8B student，lr=1e-6）
+# Run7：Seq-KD 序列级知识蒸馏（Qwen3.5-397B-A17B API teacher → Qwen3-8B student，lr=2e-5）
 
-> **结论：训练最成功，delta=+0.130（Run5 的 1.86x），loss 最终下降最多。** 移除 GPT-5.4 judge，teacher 在原始上下文上计算 logprobs，解决了 Run5 的"替身问题"。
+> **结论：Delta=-0.134，Seq-KD 反而劣于 baseline。** 使用 397B API teacher 生成训练数据，8B student 在 teacher 文本上 SFT，但模仿大模型的输出风格导致了分布偏移，损害了 student 自身的医学回答能力。关键发现：SiliconFlow API 不支持 logprobs，API-teacher 真正的 OPD 不可行，Seq-KD 是唯一路线但也存在根本局限。
 
 ---
 
 ## 1. 实验目的
 
-Run5 证明了真实大模型 teacher 的有效性，但 delta=+0.070 仍然有限。理论上，标准 OPD（On-Policy Distillation）不需要 judge 模型——teacher 直接在原始问题上提供 logprobs，student 最大化这个分布即可。
+Run6 使用本地 Qwen3-32B teacher 做 OPD 取得了 delta=+0.130 的效果。本实验探索：**能否用更强的 API teacher（397B 参数）通过 Seq-KD 方式进一步提升？**
 
-**核心假设**：GPT-5.4 judge 引入的 hint-augmented 上下文创造了一个人工的"替身 teacher"，使得 student 学习的目标偏离了真正的大模型知识分布。移除 judge → 恢复真实分布 → 更好的蒸馏效果。
+### 为什么是 Seq-KD 而非 OPD
+
+OPD（On-Policy Distillation）需要 teacher 在 **student 生成的 response** 上计算 token 级 log probability，要求 teacher 和 student 共享相同的 tokenizer，且 API 需支持 echo/logprobs。
+
+本实验验证了 SiliconFlow API 的能力边界：
+
+| 测试项 | 结果 |
+|---|---|
+| `/v1/chat/completions` 正常生成 | ✅ 正常 |
+| `/v1/completions` + `echo=True` + `logprobs`（Qwen3.5-397B） | ❌ 500 Unknown error |
+| `/v1/completions` + `echo=True` + `logprobs`（Qwen2.5-7B） | ❌ 400 "logprobs is not allowed" |
+| `extra_body: {prompt_logprobs: 1}` | ❌ 500 Unknown error |
+
+**结论：SiliconFlow 平台层面不支持 logprobs，API-based 真 OPD 对任何模型均不可行。** Seq-KD（让 teacher 生成高质量文本 → student SFT 模仿）是使用 API teacher 的唯一可行路线。
+
+### 额外的 tokenizer 不兼容问题
+
+- Qwen3 系列（8B/32B/72B）：vocab_size = 151,643
+- Qwen3.5 系列（9B/397B）：vocab_size = 248,044
+
+即使 API 支持 logprobs，两个系列也无法混用做 OPD（token id 不对应）。Seq-KD 绕过了这个限制，因为只需要 teacher 生成文本，不需要 token 对齐。
 
 ---
 
-## 2. 训练配置
+## 2. 实验配置
+
+### 2.1 整体流程
+
+```
+阶段1（数据生成）：
+  train_huatuo_2000.jsonl → SiliconFlow API (Qwen3.5-397B-A17B) → seqkd_run7_teacher.jsonl
+
+阶段2（SFT训练）：
+  seqkd_run7_teacher.jsonl → Qwen3-8B QLoRA SFT → lora_ckpt_qwen3_8b_seqkd_run7_lr2e5/final
+```
+
+### 2.2 配置表
 
 | 参数 | 值 |
 |---|---|
-| Student 模型 | Qwen3-8B (QLoRA, 4-bit NF4, r=32, alpha=64, GPU0) |
-| Teacher 模型 | Qwen3-32B (BF16, SGLang, GPU1, port 20000) |
-| Judge 模型 | **无**（no-judge 模式） |
-| 学习率 | 1e-6 |
-| Batch size | 16 |
-| OPD server port | **30011**（避免与 Run5 冲突） |
-| 训练数据 | HuaTuo 2000条（12科室 × 166 + other 8） |
+| Student 模型 | Qwen3-8B（QLoRA, NF4 量化, r=32, alpha=64） |
+| Teacher 模型 | Qwen/Qwen3.5-397B-A17B（API，无 thinking 模式）|
+| 训练方法 | Seq-KD（Sequence-level Knowledge Distillation）|
+| API 提供商 | SiliconFlow（主）+ Dashscope（补充，余额不足时切换）|
+| 学习率 | 2e-5（第一次 1e-6 失败后修正）|
+| Epochs | 3 |
+| Batch size | 16（per_device=2, grad_accum=8）|
+| Max length | 1024 tokens |
+| 训练数据 | HuaTuo 2000条（teacher生成，实际有效 1998条）|
 | 评测数据 | HuaTuo eval 200条 |
-| PRM eval | **关闭**（OPENCLAW_EVAL_MODE=0） |
-| Wandb run | `7y6x5hca` (`qwen3-32b-teacher-8b-student-nojudge-opd-lr1e-06-bs16`) |
-| Checkpoint | `/workspace/lora_ckpt_qwen3_8b_nojudge/latest` |
-| 训练开始 | 2026-06-08 06:53 |
-| 训练完成 | 2026-06-09 02:26（约19.5小时） |
-
-### No-Judge 实现方式
-
-在 `openclaw_opd_api_server.py` 的 `_opd_evaluate` 函数中添加了 no-judge bypass：
-
-```python
-if self._no_judge:
-    # 直接在原始上下文（无 hint）上计算 teacher logprobs
-    norm_orig = _normalize_messages_for_template(turn_data["messages"])
-    orig_prompt_text = tokenizer.apply_chat_template(
-        norm_orig, tokenize=False, add_generation_prompt=True
-    )
-    orig_full_text = orig_prompt_text + turn_data["response_text"]
-    orig_ids = tokenizer(orig_full_text)["input_ids"]
-    teacher_log_probs = await self._compute_teacher_log_probs(orig_ids, response_len)
-    # 接受所有样本（100% 接受率）
-    return {"accepted": True, "teacher_log_probs": teacher_log_probs, "hint": ""}
-```
-
-`_compute_teacher_log_probs` 通过 judge_proxy (port 20001) 以 `return_logprob=True` 模式转发到 SGLang，teacher 计算的上下文是**纯原始问题**，无任何 hint 注入。
-
-### 系统架构（vs Run5 的差异）
-
-```
-Run5（有judge）:
-  Turn1: student 生成回答
-  Turn2: GPT-5.4 [原始问题 + student回答] → hint
-         → teacher在[原始问题 + hint]上计算logprobs  ← "替身"
-
-Run6（无judge）:
-  Turn1: student 生成回答
-  Turn2: teacher在[原始问题]上直接计算logprobs  ← "真实"
-         → 跳过 GPT-5.4 调用，100% 样本被接受
-```
+| GPU | 1× NVIDIA A800-SXM4-80GB（GPU0，GPU1 有 zombie memory leak）|
+| Wandb run | `a1txhsp9`（`qwen35-397b-teacher-8b-student-seqkd-run7-lr2e5`）|
+| Checkpoint | `/workspace/lora_ckpt_qwen3_8b_seqkd_run7_lr2e5/final` |
 
 ---
 
-## 3. 训练过程
+## 3. 数据生成过程
 
-### 3.1 步数 & 时间
+### 3.1 生成脚本
 
-- 总步数：**229 步**（vs Run5 的 233 步，基本相同规模）
-- 平均每步约 5.1 分钟（比 Run5 慢约 13%，因为每条样本都触发 teacher 推理，而 Run5 有 17% 被 judge 直接丢弃）
-- 总采样：**3664 条**（vs Run5 的 3728，相近）
-- Queue size：绝大多数步骤为 0 或 1（无积压，说明 teacher 推理是速率限制因素）
+`generate_seqkd_data_run7.py` — 支持断点续传，已完成条目自动跳过。
 
-### 3.2 接受率
+- System prompt：`"你是一名专业的医学助手，请准确地回答医学问题。"`
+- Temperature：0.7，max_tokens：600
+- 每次调用间隔 0.3s 限速
 
-**100%**：所有 2000 条数据都被接受为训练样本，无过滤。
+### 3.2 执行过程（双 API 接力）
 
-对比 Run5 的 83.1%：
-- Run6 多利用了约 20% 的数据
-- 特别是那些被 judge 认为"已经足够好"的样本（Run5 中被丢弃的 17%）——这些样本在 Run6 中提供了**正向对齐信号**（student 的输出与 teacher 已经接近，loss 接近 0，但提供了正向梯度方向）
-
-### 3.3 Loss 曲线（稳定下降，幅度最大）
-
-| 阶段 | 步数范围 | avg_loss | 趋势 |
+| 阶段 | API | 生成条数 | 结果 |
 |---|---|---|---|
-| 初始 | 1~30 | -0.43 → -0.45 | 缓慢上升（适应期）|
-| 稳定阶段 | 30~120 | -0.45 → -0.48 | 平稳缓降 |
-| 加速阶段 | 120~190 | -0.48 → -0.57 | 加速下降 |
-| 末期 | 190~229 | -0.57 → -0.63 | 持续下降 |
+| 第一轮 | SiliconFlow | 1076/2000 | ❌ 余额不足，中途中断 |
+| 第二轮（续传） | Dashscope | 922/924 剩余 | ✅ 0 错误 |
+| **合计** | | **1998/2000** | 2条在第一轮已失败且无法补救 |
 
-**最终 avg_loss：-0.6252**（Run5 末期 avg_loss 约 -0.39，Run6 大幅下降）
+生成耗时：约 11 小时（SiliconFlow 8-9s/条；Dashscope ~3.3s/条）。
 
-```
-Step   1 | loss=-0.4338 | avg=-0.4338 | tokens=3808
-Step  30 | loss=-0.4892 | avg=-0.4475 | tokens=4197
-Step  80 | loss=-0.5458 | avg=-0.4632 | tokens=3779
-Step 120 | loss=-0.4804 | avg=-0.4867 | tokens=4315
-Step 150 | loss=-0.7802 | avg=-0.5136 | tokens=4144
-Step 180 | loss=-0.8477 | avg=-0.5470 | tokens=4000
-Step 200 | loss=-0.8575 | avg=-0.5750 | tokens=4087
-Step 225 | loss=-1.0212 | avg=-0.6172 | tokens=4035  ← checkpoint_step
-Step 229 | loss=-1.0769 | avg=-0.6252 | tokens=782   ← 末步（truncated）
-```
+### 3.3 数据样例
 
-**关键对比：初始 loss**
-- Run5: -0.1611 → Run6: **-0.4338**（2.7倍差距）
-- 这个差距揭示了真实的知识 KL 散度：Qwen3-32B 在原始问题上的分布与 Qwen3-8B 相差更大
-- Run5 的 -0.1611 是 hint-augmented teacher 人为压缩了这个差距的结果
-
-```
-wandb avg_loss 趋势：████▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▆▆▆▆▅▅▅▅▅▄▄▃▃▃▃▂▂▂▁▁▁
-（方向：块越大 = 绝对值越大 = loss 越负 = 模型越"接近" teacher）
-```
-
-### 3.4 PRM 记录样例
-
-```json
-{"session_id": "ee8bc245-...", "turn": 1, "accepted": true, "hint": "", "votes": [], "teacher_logprob_len": 289}
-{"session_id": "eb339f15-...", "turn": 1, "accepted": true, "hint": "", "votes": [], "teacher_logprob_len": 602}
-```
-
-`hint: ""` 且 `votes: []` 确认无 judge 调用。`teacher_logprob_len` 对应 teacher 计算的 token 数量，与 student 回答长度一致。
+Teacher（397B）的回答风格为结构化的 Markdown 格式，包含 `###` 标题、`**加粗**` 和 `*bullet list*`，比 baseline（Qwen3-8B 原始输出）更长更结构化。这一点后来被认为是影响评测结果的关键因素。
 
 ---
 
-## 4. 评测结果
+## 4. 训练过程
 
-### 4.1 总体得分
+### 4.1 第一次尝试（失败）：lr=1e-6，2 epochs
+
+从 OPD 训练脚本（Run6）复制超参数，lr=1e-6。
 
 | 指标 | 值 |
 |---|---|
-| Baseline avg score（Qwen3-8B 未训练） | **3.194** |
-| Trained avg score（Run6 checkpoint） | **3.324** |
-| **Delta** | **+0.130** |
+| 步数 | 238 |
+| 训练时长 | 13 分钟 |
+| train loss | 1.72 → 1.646（仅降 4.6%）|
+| eval loss | 1.644（≈ train loss，明显欠拟合）|
+
+**根因**：SFT 是普通交叉熵，lr=1e-6 比标准 SFT lr（2e-5）小 20 倍，模型几乎没有更新。
+
+### 4.2 第二次训练（正式）：lr=2e-5，3 epochs
+
+| 指标 | 值 |
+|---|---|
+| 步数 | 357 |
+| 训练时长 | 约 21 分钟 |
+| train loss | 1.70 → 1.20（下降 30%）|
+| eval loss（epoch1）| 1.265 |
+| eval loss（epoch2）| 1.215 |
+| eval loss（epoch3）| **1.21** |
+
+Loss 曲线表现健康：
+- 前 100 步快速下降（1.70 → 1.30）
+- 100 步后趋于平稳（1.30 → 1.20）
+- train loss ≈ eval loss，无过拟合
+- grad_norm 从 0.65 快速降至 0.2 后稳定，训练正常收敛
+
+**技术问题记录**：
+- `Trainer.__init__() unexpected keyword argument 'tokenizer'`：transformers 5.9 将该参数改名为 `processing_class`，已修复
+- GPU1 zombie memory leak（72GB 残留，进程已不存在）：切换至 GPU0（80GB 全空闲）解决
+
+---
+
+## 5. 评测结果
+
+### 5.1 总体得分
+
+| 指标 | 值 |
+|---|---|
+| Baseline avg score（Qwen3-8B 未训练） | **3.212** |
+| Run7 Seq-KD avg score | **3.078** |
+| **Delta** | **-0.134** |
 | 评测对数 | 200 |
-| 评测模型 | GPT-5.4（准确性/完整性/清晰度，各1-5分，取均值） |
+| 评测模型 | GPT-5.4（准确性/完整性/清晰度，各1-5分，取均值）|
 
-### 4.2 Per-department 详细结果（对比 Run5）
+### 5.2 Per-department 详细结果
 
-| 科室 | Baseline | Run6 | Run6 delta | Run5 delta | 趋势 |
-|---|---|---|---|---|---|
-| 内分泌代谢 | 3.19 | 3.42 | **+0.23** | +0.00 | ↑大幅提升 |
-| 呼吸 | 3.36 | 3.21 | **-0.15** | +0.04 | ↓退化 |
-| 外科骨科 | 3.23 | 3.60 | **+0.38** | +0.25 | ↑进一步提升 |
-| 妇产儿科 | 3.10 | 3.27 | **+0.17** | +0.02 | ↑显著提升 |
-| 心血管 | 3.10 | 3.21 | **+0.10** | +0.10 | → 持平 |
-| 急诊重症 | 3.48 | 3.40 | **-0.08** | -0.12 | ↑退化减少 |
-| 感染免疫 | 3.08 | 3.19 | **+0.10** | +0.08 | → 持平 |
-| 检验影像 | 3.24 | 3.42 | **+0.18** | +0.11 | ↑提升加大 |
-| 消化 | 3.38 | 3.40 | **+0.02** | -0.21 | ↑Run5退化问题已修复 |
-| 神经 | 3.12 | 3.48 | **+0.35** | +0.27 | ↑进一步提升 |
-| 肾脏泌尿 | 3.21 | 3.17 | **-0.04** | +0.17 | ↓小幅退化 |
-| 药理用药 | 2.81 | 3.08 | **+0.27** | +0.11 | ↑大幅提升 |
+| 科室 | Baseline | Run7 | Delta | 趋势 |
+|---|---|---|---|---|
+| 妇产儿科 | 3.04 | 3.08 | **+0.04** | ↑ |
+| 感染免疫 | 3.19 | 2.92 | **-0.27** | ↓ 明显退化 |
+| 呼吸 | 3.31 | 3.33 | **+0.02** | → 持平 |
+| 急诊重症 | 3.54 | 3.31 | **-0.23** | ↓ 退化 |
+| 检验影像 | 3.33 | 3.11 | **-0.22** | ↓ 退化 |
+| 内分泌代谢 | 3.27 | 3.12 | **-0.15** | ↓ 退化 |
+| 神经 | 3.19 | 3.08 | **-0.11** | ↓ 小幅退化 |
+| 肾脏泌尿 | 3.21 | 3.02 | **-0.19** | ↓ 退化 |
+| 外科骨科 | 3.21 | 2.92 | **-0.29** | ↓ 最大退化 |
+| 消化 | 3.36 | 3.10 | **-0.25** | ↓ 退化 |
+| 心血管 | 3.00 | 2.98 | **-0.02** | → 持平 |
+| 药理用药 | 2.83 | 2.94 | **+0.11** | ↑ 唯一明显提升 |
 
-**9/12 科室提升（vs Run5 的 8/12），Run5 最大退化科室（消化-0.21）在 Run6 中修复为+0.02**
+**3/12 科室提升，9/12 科室退化。** 退化最大：外科骨科（-0.29）、感染免疫（-0.27）。
 
 ---
 
-## 5. 为什么 Run6 > Run5：完整机制分析
+## 6. 为什么 Seq-KD 表现更差：机制分析
 
-### 5.1 替身问题的解决
+### 6.1 分布偏移（核心原因）
 
-| 维度 | Run5（有judge） | Run6（无judge） |
+397B teacher 的回答风格与 Qwen3-8B 自身的输出分布有显著差异：
+
+| 特征 | Qwen3-8B（baseline）| 397B teacher |
 |---|---|---|
-| Teacher 上下文 | `[问题 + hint]` | `[问题]` |
-| Teacher 分布 | `P(y | x + hint)` | `P(y | x)` ← 真实 |
-| Student 推理上下文 | `[问题]` | `[问题]` ← 对齐！ |
-| 训练目标 | 最大化 hint 辅助的分布 | 最大化真实 32B 分布 |
-| 初始 KL 散度 | 小（-0.16，hint压缩了差距）| 大（-0.43，真实差距） |
+| 回答长度 | 相对简洁 | 较长，含 markdown 结构 |
+| 格式 | 流畅段落 | `###` 标题 + `**加粗**` + bullet list |
+| 语气 | 直接回答 | 更学术、分层展开 |
 
-Run6 让 student 学习的目标与推理时面对的情景完全一致。
+SFT 强制 8B 模仿 397B 的输出风格，导致：
+- 模型语言模式被改变（学会了 markdown 结构）
+- 但医学知识并未从 teacher 真正传递到 student（Seq-KD 是文本级模仿，非分布级对齐）
+- GPT-5.4 评测关注医学**内容质量**，而非格式，因此格式变了但分数反而下降
 
-### 5.2 数据效率提升
+### 6.2 Off-policy 的根本局限
 
-- Run5 有效训练样本：1662/2000 = **83.1%**
-- Run6 有效训练样本：2000/2000 = **100%**
-- 多出约 338 条训练样本，其中包含：
-  - "judge 认为已经足够好"的样本 → 这些样本提供了**正向对齐信号**，告诉 student 某些输出已经接近 32B teacher
-  - "judge API 超时/失败"的样本 → Run5 中直接丢弃，Run6 中保留
+OPD 和 Seq-KD 的本质区别：
 
-### 5.3 更大的 KL 散度 = 更多学习空间
+```
+OPD（Run6）：
+  student 生成回答 → teacher 在 student 回答上打分 → 优化 student 向 teacher 分布靠近
+  → On-policy：teacher 在 student 当前的输出上给信号，梯度方向精准
 
-- Run5 初始 loss -0.16 意味着 teacher（hint-augmented）和 student 从一开始就很接近
-- Run6 初始 loss -0.43 意味着真正的知识差距更大，student 有更多东西可以从 teacher 学习
-- 这解释了为什么 Run6 的 loss 最终能降到 -1.08，而 Run5 只降到 -0.90
+Seq-KD（Run7）：
+  teacher 生成回答 → student 模仿 teacher 的文本 → cross-entropy loss
+  → Off-policy：teacher 的输出是 teacher 自己的分布，student 被迫离开自身分布
+```
 
-### 5.4 正向样本的重要性
+当 teacher 比 student 强很多（397B vs 8B），teacher 的输出分布与 student 相差极大，强行模仿导致 student 能力退化，类似于让小学生强背博士论文——背下来了格式，但理解力反而下降。
 
-Run5 过滤掉所有 judge 认为"已经足够好"的样本，逻辑是"只纠正错误"。但这相当于剥夺了：
-- 让 student 知道"这种输出风格是 32B 也会产生的"的信号
-- 对已经准确的输出进行参数强化
-- 跨科室平衡的训练分布（judge 可能对某些科室更严格）
+### 6.3 Run6 OPD 不存在这个问题
 
----
+Run6 的 teacher（32B）在 student（8B）**自己生成的回答**上打分，信号方向是"如何让你现有的回答更接近 32B 的分布"，而非"丢掉你的回答，模仿我的"。这是 OPD 在理论上优于 Seq-KD 的核心原因。
 
-## 6. 局限性与潜在改进方向
+### 6.4 药理用药是正向异常
 
-### 6.1 无法利用 judge 信息
-
-No-judge 模式放弃了 GPT-5.4 的医学评估能力：
-- 无法识别"安全但低质量"的回答（如信息不足但听起来合理）
-- 无法在特别危险的错误上施加更大的惩罚
-- 可能导致少数科室（如急诊重症、肾脏泌尿）轻微退化
-
-**潜在方案**：selective no-judge — 只在 judge 确认"好回答"的样本上使用原始上下文，在"需要改进"的样本上使用适度 hint 辅助的上下文
-
-### 6.2 训练时间较长
-
-- 每条样本都需要 teacher 推理（无 judge 早停）→ 约 19.5 小时
-- 优化空间：batch teacher inference，减少 teacher 推理次数
-
-### 6.3 分布漂移仍存在
-
-teacher 在固定的原始上下文上计算 logprobs，而 student 在训练中持续更新。随着 student 越来越接近 teacher，KL 散度减小，梯度信号自然减弱。这是 on-policy distillation 的内在特性，非本次实验独有问题。
+药理用药（+0.11）是唯一明显提升的科室，可能原因：
+- 该科室本身格式化信息多（药品名、剂量、禁忌），teacher 的结构化格式恰好匹配评测期望
+- 该科室 baseline 分数最低（2.83），存在较大提升空间
 
 ---
 
 ## 7. 与其他 Run 完整对比
 
-| 维度 | Run2 | Run3 | Run4 | Run5 | **Run6** |
-|---|---|---|---|---|---|
-| Student | 9B | 9B | 9B | 8B | **8B** |
-| Teacher | 9B(self) | 9B(self) | 9B(self) | 32B | **32B** |
-| LR | 5e-7 | 1e-6 | 2e-6 | 1e-6 | **1e-6** |
-| Judge | 有 | 有 | 有 | 有 | **无** |
-| Teacher 上下文 | hint+原始 | hint+原始 | hint+原始 | hint+原始 | **原始** |
-| 接受率 | ~83% | ~83% | ~83% | 83.1% | **100%** |
-| 步数 | 48 | 116 | 109 | 233 | **229** |
-| 初始 loss | — | — | -0.72 | -0.16 | **-0.43** |
-| 末步 loss | — | — | -0.58 | -0.90 | **-1.08** |
-| Delta | N/A | N/A | -0.090 | +0.070 | **+0.130** |
+| 维度 | Run4 | Run5 | Run6 | **Run7** |
+|---|---|---|---|---|
+| Student | 9B | 8B | 8B | **8B** |
+| Teacher | 9B(self) | 32B(local) | 32B(local) | **397B(API)** |
+| 方法 | OPD+judge | OPD+judge | OPD | **Seq-KD** |
+| On/Off policy | On | On | On | **Off** |
+| Teacher 上下文 | hint+原始 | hint+原始 | 原始 | **N/A（teacher生成文本）** |
+| 接受率 | ~83% | 83.1% | 100% | **N/A** |
+| 数据量 | 2000 | 2000 | 2000 | **1998（teacher生成）** |
+| 最终 train loss | — | -0.90 | -1.08 | **1.20（CE loss，不可比）** |
+| eval loss | — | — | — | **1.21** |
+| Delta | -0.090 | +0.070 | +0.130 | **-0.134** |
+| 结论 | 退化 | 初步有效 | 最佳 | **退化** |
 
 ---
 
-## 8. 文件索引
+## 8. 局限性与后续改进方向
+
+### 8.1 Seq-KD 的固有问题
+
+- **无法做 on-policy**：teacher 的文本是固定的，student 训练中生成分布变化后无法重新获取 teacher 信号
+- **分布差距越大效果越差**：teacher 越强，输出风格与 student 差异越大，SFT 模仿难度越高
+- **格式污染**：397B 的结构化输出可能影响 student 的自然语言能力
+
+### 8.2 可能的改进
+
+1. **过滤 teacher 数据**：只保留 teacher 回答中与 baseline 风格相近（长度、格式接近）的样本
+2. **DPO/ORPO**：用 teacher 回答作为 chosen，student baseline 回答作为 rejected，做偏好对齐而非直接 SFT
+3. **本地大模型 OPD（Run8 计划）**：使用 Qwen3-235B-A22B-FP8（ModelScope 可下载，~235GB FP8，4×A800 可运行），恢复 on-policy 优势
+
+### 8.3 API OPD 的彻底不可行
+
+本实验同时验证了 API-based 真 OPD 的不可行性：
+- SiliconFlow：不支持任何形式的 logprobs（平台级限制）
+- Dashscope：支持 chat completions 生成，但 logprobs 未经测试（预期同样不支持）
+- 即使 API 支持 logprobs，Qwen3（151k vocab）和 Qwen3.5（248k vocab）tokenizer 不兼容，也无法混用
+
+---
+
+## 9. 文件索引
 
 | 文件 | 路径 |
 |---|---|
-| 训练日志 | `/workspace/logs/nojudge_train.log`（12MB） |
-| Wandb run | `http://103.139.212.228:3005/johnson/medical-opd/runs/7y6x5hca` |
-| PRM 记录 | `/workspace/logs/opd_nojudge_record_prm.jsonl`（268KB，2000条） |
-| Checkpoint | `/workspace/lora_ckpt_qwen3_8b_nojudge/latest/` |
-| 评测输出 | `/workspace/eval_results/trained_qwen3_8b_nojudge.jsonl` |
-| 评测得分 | `/workspace/eval_results/score_comparison_nojudge.jsonl` |
-| OPD server（修改版） | `/workspace/OnPolicy/OpenClaw-RL/openclaw-opd/openclaw_opd_api_server.py` |
-| 训练脚本 | `/workspace/run_self_opd_32b_nojudge.py` |
-| 评测脚本 | `/workspace/run_eval_qwen3_8b_nojudge.py` |
-| 打分脚本 | `/workspace/run_score_nojudge.py` |
+| 数据生成脚本 | `/workspace/generate_seqkd_data_run7.py` |
+| SFT 训练脚本 | `/workspace/run_seqkd_run7.py` |
+| Teacher 生成数据 | `/workspace/data/seqkd_run7_teacher.jsonl`（1998条）|
+| 训练日志（lr=1e-6） | `/workspace/logs/sft_run7.log` |
+| 训练日志（lr=2e-5） | `/workspace/logs/sft_run7_lr2e5.log` |
+| Wandb run | `http://103.139.212.228:3005/johnson/medical-opd/runs/a1txhsp9` |
+| Checkpoint | `/workspace/lora_ckpt_qwen3_8b_seqkd_run7_lr2e5/final/` |
+| 评测生成脚本 | `/workspace/run_eval_qwen3_8b_seqkd_run7.py` |
+| 打分脚本 | `/workspace/run_score_seqkd_run7.py` |
+| 评测输出 | `/workspace/eval_results/trained_qwen3_8b_seqkd_run7.jsonl` |
+| 评测得分 | `/workspace/eval_results/score_comparison_seqkd_run7.jsonl` |
+| API logprobs 测试 | `/workspace/test_echo_logprobs.py`、`test_echo_logprobs2.py`、`test_echo_logprobs3.py` |
+| .env（API 密钥） | `/workspace/opd_project/.env`（gitignored）|
