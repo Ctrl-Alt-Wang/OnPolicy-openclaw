@@ -1,0 +1,5 @@
+/model/ModelScope/Qwen/Qwen2.5-72B-Instruct:   "vocab_size": 152064
+/workspace/Qwen3-8B:   "vocab_size": 151936
+/workspace/Qwen3-32B:   "vocab_size": 151936
+/workspace/Qwen3.5-9B:         "vocab_size": 248320,
+/workspace/Qwen3-72B/Qwen/Qwen3-72B: NOT_FOUND
